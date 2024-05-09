@@ -1,6 +1,6 @@
-import { AppState, Platform, Modal, Animated, StyleSheet,
-     View, Image, Dimensions, SafeAreaView } from 'react-native';
-import {wScale, hScale, SCREEN_WIDTH, SCREEN_HEIGHT} from '../../utils/scaling';
+import { AppState, Modal, Animated, StyleSheet,
+     View, Image } from 'react-native';
+import {wScale, hScale, SCREEN_HEIGHT} from '../../utils/scaling';
 import RegularText from '../../component/ui/regular-text'
 import react, {useEffect,useRef, useState} from 'react';
 import CircleButton from '../../component/ui/buttons/circle-button';
@@ -65,35 +65,29 @@ export default function Shower(){
     
     useEffect(() => {
         let interval;
-        let interval2;
         if (isRunning){
             // Animated.timing(animatedValue, {
             // toValue: SCREEN_HEIGHT,
             // duration: time * 1000 ,
             // useNativeDriver: false,
         // }).start();
-        interval = setInterval(() => {
-            setTime((prevTime) => {
-                if(prevTime <= 1){
-                    clearInterval(interval);
-                    setIsRunning(false);
-                    autoModalOpen();
-                    return 0;
-                }
-                return prevTime -1;
-            })
-        }, 1000);
-        // interval2 = setInterval(() => {
-        //     const remain = (washingCompletedTime - new Date().getTime())/(1000);
-        //     setCurrentRemainTime(remain);
-        //     const persent = 1 - (remain/washingTime);
-        //     setWashingTimePersent(persent);
-        // }, 10);
-        return () => {
-            // clearInterval(interval);
-            // clearInterval(interval2);
-        }
         
+        interval = setInterval(() => {
+            const remain = (washingCompletedTime - new Date().getTime())/(1000);
+            setCurrentRemainTime(remain);
+            const persent = 1 - (remain/washingTime);
+            setWashingTimePersent(persent);
+            setTime((prevTime) => {
+                    if(prevTime <= 1){
+                        clearInterval(interval);
+                        setIsRunning(false);
+                        autoModalOpen();
+                        return 0;
+                    }
+                    return Math.floor((washingCompletedTime - new Date().getTime())/(1000)) -1;
+            })
+        }, 10);
+        return () => clearInterval(interval);
     }
     }, [isRunning]);
     
@@ -163,7 +157,7 @@ export default function Shower(){
                 <View style={styles.modalContainer}>
                     <View style={styles.modalBack}/>
                     <View style={styles.modal}>
-                        <Image source={Success} style={styles.img}></Image>
+                        <Image source={Fail} style={styles.img}></Image>
                         <RegularText style={styles.modalText}>지각 예정이에요..!</RegularText>
                         <RegularText style={styles.modalText}>서둘러 주세요.</RegularText>
                         <ModalBtn style={styles.btn}children='다음' onPress={onModalNext}/>

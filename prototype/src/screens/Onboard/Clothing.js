@@ -1,5 +1,5 @@
-import { Modal, Animated, StyleSheet, Text, View, Image, Button, Dimensions } from 'react-native';
-import {wScale, hScale, SCREEN_WIDTH, SCREEN_HEIGHT} from '../../utils/scaling';
+import { AppState , Modal, Animated, StyleSheet, Text, View, Image, Button, Dimensions } from 'react-native';
+import {wScale, hScale, SCREEN_HEIGHT} from '../../utils/scaling';
 import RegularText from '../../component/ui/regular-text';
 import react, {useEffect,useRef, useState} from 'react';
 import CircleButton from '../../component/ui/buttons/circle-button';
@@ -10,50 +10,86 @@ import { useNavigation } from '@react-navigation/native';
 import { setSavedEtcTime } from '../../stores/ready-time-slice';
 import { useSelector, useDispatch } from 'react-redux';
 
-const {height} = Dimensions.get('window');
 
 export default function Clothing(){
+    const appState = useRef(AppState.currentState);
+    const [appStateVisible, setAppStateVisible] = useState(appState.current); 
+    // 씻기에서 아낀 시간
     const savedWasingTime = useSelector((state) => state.readyTime.savedWasingTime);
+    // 옷입기를 완료한 시점
     const etcCompletedTime = useSelector((state) => state.readyTime.etcCompletedTime);
+    // 옷입기를 위해 할당된 시간
+    const etcTime = useSelector((state) => state.readyTime.etcTime) * 60;
+    // 화면이 로드된 시점에서 옷입기를 완료하기까지 남은 시간
+    const [currentRemainTime, setCurrentRemainTime] = useState(Math.floor((etcCompletedTime - new Date().getTime())/(1000) - savedWasingTime));
+    // 전체 옷입기 시간에서 소비한 시간의 비율
+    const [clothingTimePersent, setClothingTimePersent] = useState(1 - (currentRemainTime/etcTime));
 
-    const [time, setTime] = useState(Math.floor((etcCompletedTime - new Date().getTime())/(1000) - savedWasingTime));
+    const [timeLeft, setTimeLeft] = useState();
+    const [time, setTime] = useState(etcTime);
     const [isRunning, setIsRunning] = useState(true);
     const [modalOpen, setModalOpen] = useState(false);
     const [failModalOpen, setFailModalOpen] = useState(false);
-    const animatedValue = useRef(new Animated.Value(0)).current;
+    const [animatedValue, setAnimatedValue] = useState(new Animated.Value(SCREEN_HEIGHT * clothingTimePersent));
     const navigation = useNavigation();
 
     const dispatch = useDispatch();
 
     useEffect(() => {
-        let interval;
-        if (isRunning){
-            Animated.timing(animatedValue, {
-            toValue: SCREEN_HEIGHT,
-            duration: time * 1000 ,
-            useNativeDriver: false,
-        
-        }).start();
-        interval = setInterval(() => {
-            setTime((prevTime) => {
+        const subscription = AppState.addEventListener('change', nextAppState => {
+        if(
+            appState.current.match(/inactive|background/) && 
+            nextAppState === 'active'
+        ){
+            const remain = Math.floor((etcCompletedTime - new Date().getTime())/(1000))
+            setCurrentRemainTime(remain);
+            const persent = 1 - (remain/etcTime);
+            setClothingTimePersent(persent);
+            const animeatedValue_ = new Animated.Value(SCREEN_HEIGHT * persent);
+            setAnimatedValue(new Animated.Value(SCREEN_HEIGHT * persent));
+        }
+        appState.current = nextAppState;
+        setAppStateVisible(appState.current);
+    });
+
+    return () => {
+        subscription.remove();
+    };
+},[]);
+
+useEffect(() => {
+    let interval;
+    if (isRunning){
+        // Animated.timing(animatedValue, {
+        // toValue: SCREEN_HEIGHT,
+        // duration: time * 1000 ,
+        // useNativeDriver: false,
+    // }).start();
+    
+    interval = setInterval(() => {
+        const remain = (etcCompletedTime - new Date().getTime())/(1000);
+        setCurrentRemainTime(remain);
+        const persent = 1 - (remain/etcTime);
+        setClothingTimePersent(persent);
+        setTime((prevTime) => {
                 if(prevTime <= 1){
                     clearInterval(interval);
                     setIsRunning(false);
                     autoModalOpen();
                     return 0;
                 }
-                return prevTime -1;
-            })
-        }, 1000);
-        return () => clearInterval(interval);
-        
-    }
-    }, [isRunning]);
+                return Math.floor(Math.floor((etcCompletedTime - new Date().getTime())/(1000) - savedWasingTime)) -1;
+        })
+    }, 10);
+    return () => clearInterval(interval);
+}
+}, [isRunning]);
     
 
     const onPressModalOpen = () => {
         setModalOpen(true);
         setIsRunning(false);
+        setTimeLeft(time);
         Animated.timing(animatedValue).stop();
     }
 
@@ -82,6 +118,13 @@ export default function Clothing(){
         
         return `${minute.toString().padStart(1, '0')} 분 ${second.toString().padStart(1, '0')} 초`;
     }
+    const onModalNext = () => {
+        if(time > 0){
+            dispatch(setSavedEtcTime(time));
+        }
+        onPressModalClose();
+        navigation.navigate('Moving');
+    }
 
     return(
         <View style={styles.background}>
@@ -91,15 +134,15 @@ export default function Clothing(){
                 <RegularText style={styles.text1}>{formattedTime(time)}</RegularText>
                 <CircleButton children='완료' color="#7AFFB7" onPress={() => onPressModalOpen()}/>
             </View>
-            <Animated.View style={[styles.colorback,{ height: animatedValue.interpolate({inputRange: [0, SCREEN_HEIGHT],outputRange: [0,SCREEN_HEIGHT],})}]} />
-    
+            {/* <Animated.View style={[styles.colorback,{ height: animatedValue.interpolate({inputRange: [0, SCREEN_HEIGHT],outputRange: [0,SCREEN_HEIGHT],})}]} /> */}
+            <View style={[styles.colorback, {height:SCREEN_HEIGHT * clothingTimePersent}]} /> 
             <Modal animationType='slide' visible = {modalOpen} transparent={true}>
             <View style={styles.modalContainer}>
                 <View style={styles.modalBack}/>
                 <View style={styles.modal}>
                     <Image source={Success} style={styles.img}></Image>
                     <RegularText style={styles.modalText}>{formattedTime2(time)} 아끼셨네요</RegularText>
-                    <ModalBtn style={styles.btn}children='다음' onPress={()=>{onPressModalClose(); navigation.navigate('Moving');}}/>
+                    <ModalBtn style={styles.btn}children='다음' onPress={onModalNext}/>
                 </View>
                 </View>
             </Modal>
@@ -108,10 +151,10 @@ export default function Clothing(){
             <View style={styles.modalContainer}>
                 <View style={styles.modalBack}/>
                 <View style={styles.modal}>
-                    <Image source={Success} style={styles.img}></Image>
+                    <Image source={Fail} style={styles.img}></Image>
                     <RegularText style={styles.modalText}>지각 예정이에요..!</RegularText>
                     <RegularText style={styles.modalText}>서둘러 주세요.</RegularText>
-                    <ModalBtn style={styles.btn}children='다음' onPress={()=>{onPressModalClose(); navigation.navigate('Moving');}}/>
+                    <ModalBtn style={styles.btn}children='다음' onPress={onModalNext}/>
                 </View>
                 </View>
             </Modal>
@@ -125,14 +168,17 @@ const styles = StyleSheet.create({
     background: {
         backgroundColor: "#FFFFFF",
         flex: 1,
-        width:'100%',
-        height: '100%',
+        // width:'100%',
+        // height: '100%',
         alignItems: 'center',
         flexDirection: 'column-reverse',
     },
     colorback: {
         backgroundColor: "#7AFFB7",
-        width:'100%',
+        // flex: 1,
+        // width:hScale(SCREEN_HEIGHT),
+        width: '100%',
+        transition: '1s',
         zIndex: 1
     },
     text: {
